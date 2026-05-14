@@ -67,6 +67,7 @@ table.ovt tfoot td{font-weight:700;background:#f9fafb;border-top:2px solid #e5e7
 }
 /* PWA / Homescreen */
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </head>
 <body>
 <h1>Stefan Bode &middot; Alltagsbegleitung</h1>
@@ -277,12 +278,19 @@ table.ovt tfoot td{font-weight:700;background:#f9fafb;border-top:2px solid #e5e7
 "use strict";
 
 function loadSheetJS(callback) {
+  // SheetJS wird via defer geladen - kurz warten falls noch nicht fertig
   if (typeof XLSX !== "undefined") { callback(null); return; }
-  var s = document.createElement("script");
-  s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
-  s.onload = function() { callback(null); };
-  s.onerror = function() { callback(new Error("SheetJS konnte nicht geladen werden. Internetverbindung prüfen.")); };
-  document.head.appendChild(s);
+  var attempts = 0;
+  var check = setInterval(function() {
+    attempts++;
+    if (typeof XLSX !== "undefined") {
+      clearInterval(check);
+      callback(null);
+    } else if (attempts > 20) {
+      clearInterval(check);
+      callback(new Error("Excel-Export nicht verfügbar. Bitte Internetverbindung prüfen und Seite neu laden."));
+    }
+  }, 250); // alle 250ms prüfen, max 5 Sekunden
 }
 
 var MN = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
