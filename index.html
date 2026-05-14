@@ -83,7 +83,7 @@ table.ovt tfoot td{font-weight:700;background:#f9fafb;border-top:2px solid #e5e7
 </div>
 <div class="bar no-print">
   <button id="btn-imp" class="xb">&#9654; Sitzung starten</button>
-  <button id="btn-exp" class="sb" style="border-color:#059669;color:#065f46">&#8595; Backup erstellen</button>
+  <button id="btn-exp" class="sb" style="border:1px solid #059669;color:#065f46;background:#ecfdf5">&#8595; Backup erstellen</button>
   <button id="btn-clear" style="padding:6px 12px;border-radius:7px;border:1px solid #dc2626;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:12px">&#9632; Sitzung beenden</button>
 </div>
 
@@ -320,13 +320,64 @@ document.querySelector(".nav").addEventListener("click", function(ev) {
 });
 
 // EXCEL EXPORT
+g("btn-exp").addEventListener("click", function() {
+  loadSheetJS(function(err) {
+    if (err) { showToast(err.message, false); return; }
+    doExport();
+  });
+});
+function doExport() {
+  if (typeof XLSX === "undefined") { showToast("SheetJS nicht verfügbar", false); return; }
+  var wb = XLSX.utils.book_new();
+  var ar = parseFloat(D.P.af) || 7.65;
+  var eRows = [["Datum","Vorname","Nachname","Kunden_Index","Stunden","Taetigkeit","Abrechnung","Anfahrt","Betrag_EUR","Notiz"]];
+  D.E.forEach(function(e) {
+    var k = D.K[e.ki], sz = k ? k.sz||39 : 39;
+    eRows.push([e.datum, k?k.vn:"", k?k.nn:"", e.ki, e.std, e.tat, e.abr, e.anf, parseFloat((e.std*sz+(e.anf?ar:0)).toFixed(2)), e.not]);
+  });
+  var wsE = XLSX.utils.aoa_to_sheet(eRows);
+  wsE["!cols"] = [{wch:12},{wch:14},{wch:16},{wch:6},{wch:8},{wch:30},{wch:10},{wch:8},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, wsE, "Einst");
+  var kRows = [["Index","Vorname","Nachname","Kuerzel","Geburtsdatum","Pflegegrad","Strasse","Ort","Telefon","Pflegekasse","Stundensatz","Abrechnungsweg","Betreuer","Hinweise"]];
+  D.K.forEach(function(k,i) { kRows.push([i,k.vn,k.nn,k.kz,k.gb,k.pg,k.st,k.ot,k.tl,k.ks,k.sz,k.aw,k.bt,k.hi]); });
+  var wsK = XLSX.utils.aoa_to_sheet(kRows);
+  wsK["!cols"] = [{wch:6},{wch:14},{wch:16},{wch:8},{wch:12},{wch:10},{wch:22},{wch:18},{wch:16},{wch:20},{wch:12},{wch:16},{wch:20},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, wsK, "Kunden");
+  var rRows = [["Nummer","Kunden_Index","Monat","Jahr"]];
+  D.R.forEach(function(r) { rRows.push([r.nr, r.ki, r.mo, r.ja]); });
+  var wsR = XLSX.utils.aoa_to_sheet(rRows);
+  XLSX.utils.book_append_sheet(wb, wsR, "Rechnungen");
+  var pRows = [["Feld","Wert"],["vorname",D.P.vn],["nachname",D.P.nn],["strasse",D.P.st],["ort",D.P.ot],["telefon",D.P.tl],["email",D.P.ml],["iban",D.P.ib],["ik",D.P.ik],["satz",D.P.sz],["anfahrt",D.P.af],["zahlung",D.P.zl],["steuernr",D.P.sn],["steuer",D.P.sh]];
+  var wsP = XLSX.utils.aoa_to_sheet(pRows);
+  wsP["!cols"] = [{wch:14},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, wsP, "Profil");
+  XLSX.writeFile(wb, "ABG_Backup_" + new Date().toISOString().split("T")[0] + ".xlsx");
+  showToast("Backup erstellt");
+}
+
+// EXCEL IMPORT
 g("btn-imp").addEventListener("click", function() {
-  // Sitzung starten: Backup laden
-  g("imp-file").click();
+  // Sitzung starten: aus localStorage laden oder Backup-Datei
+  var loaded = false;
+  try {
+    var stored = localStorage.getItem("abg-data");
+    if (stored) {
+      var parsed = JSON.parse(stored);
+      if ((parsed.einsaetze||[]).length > 0) {
+        migrateInit(parsed);
+        renderAll();
+        showToast("Sitzung gestartet: "+D.K.length+" Kunden, "+D.E.length+" Einsätze geladen");
+        loaded = true;
+      }
+    }
+  } catch(e) {}
+  if (!loaded) {
+    showToast("Kein gespeicherter Stand – bitte Backup-Datei wählen");
+    setTimeout(function() { g("imp-file").click(); }, 1200);
+  }
 });
 
 g("btn-exp").addEventListener("click", function() {
-  // Backup erstellen
   loadSheetJS(function(err) {
     if (err) { showToast(err.message, false); return; }
     doExport();
@@ -334,16 +385,15 @@ g("btn-exp").addEventListener("click", function() {
 });
 
 g("btn-clear").addEventListener("click", function() {
-  // Sitzung beenden: erst Backup, dann loeschen
   loadSheetJS(function(err) {
     if (err) {
-      if (!confirm("Backup konnte nicht erstellt werden (kein Internet).\nTrotzdem alle Daten l\u00f6schen?")) return;
+      if (!confirm("Backup konnte nicht erstellt werden (kein Internet).\nTrotzdem alle Daten löschen?")) return;
       clearAllData();
       return;
     }
     doExport();
     setTimeout(function() {
-      if (!confirm("Backup wurde erstellt.\nJetzt alle Daten l\u00f6schen?")) return;
+      if (!confirm("Backup wurde erstellt.\nJetzt alle Daten löschen und Sitzung beenden?")) return;
       clearAllData();
     }, 1500);
   });
@@ -354,7 +404,7 @@ function clearAllData() {
   D.P = JSON.parse(JSON.stringify(PD));
   try { localStorage.removeItem("abg-data"); } catch(e) {}
   renderAll();
-  showToast("Sitzung beendet \u2013 Daten gel\u00f6scht");
+  showToast("Sitzung beendet – Daten gelöscht");
 }
 g("imp-file").addEventListener("change", function() {
   if (!this.files || !this.files[0]) return;
